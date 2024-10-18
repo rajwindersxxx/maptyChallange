@@ -10,6 +10,7 @@ const inputElevation = document.querySelector('.form__input--elevation');
 const inputLocation = document.querySelector('.form__input--location');
 const sideBar = document.querySelector('.sidebar');
 
+const workoutHeading = document.querySelector('.workout__heading');
 const workoutSpeedSort = document.querySelector('.speed__sorting');
 const workoutFilter = document.querySelector('.form__input--filter');
 const workoutList = document.querySelector('.workouts__data');
@@ -17,11 +18,14 @@ const workoutEdit = document.querySelector('.workout__edit');
 const workoutDeleteAll = document.querySelector('.deleteAll__btn');
 const workoutAdd = document.querySelector('.add__btns');
 
-const workoutHeading = document.querySelector('.workout__heading');
 const overlayWindow = document.querySelector('.overlay');
 const modelWindow = document.querySelector('model__window');
 const errorMessage = document.querySelector('.message');
-const errorButton = document.querySelector('.confirm__button');
+// model windows buttons
+const allErrorButtons = document.querySelectorAll('.confirm__button');
+const errorButton = document.querySelector('.confirm__ok');
+const confirmButton = document.querySelector('.confirm__yes');
+const cancelButton = document.querySelector('.confirm__no');
 //Test button
 const testButton = document.querySelector('.test');
 
@@ -137,9 +141,11 @@ class App {
     inputType.addEventListener('change', this._toggleElevationField);
     containerWorkouts.addEventListener('click', this._moveToPopup.bind(this));
     workoutHeading.addEventListener('click', this._sortingWorkout.bind(this));
-    errorButton.addEventListener('click', this._hideErrorMessage);
     overlayWindow.addEventListener('click', this._hideErrorMessage.bind(this));
     workoutAdd.addEventListener('click', this._showForm.bind(this));
+    errorButton.addEventListener('click', this._hideErrorMessage.bind(this));
+    cancelButton.addEventListener('click', this._hideErrorMessage.bind(this));
+    confirmButton.addEventListener('click', this._hideErrorMessage.bind(this));
     workoutDeleteAll.addEventListener(
       'click',
       this._deleteAllWorkout.bind(this)
@@ -241,8 +247,10 @@ class App {
       return;
     }
     // return error if location not choose form map
-    if (!this.#mapEvent.latlng)
+    if (!this.#mapEvent.latlng) {
+      errorButton.classList.remove('hidden__input');
       return this._renderErrorMessage('Please choose location from map');
+    }
     // run when editWorkout is false
     const validInputs = (...inputs) =>
       inputs.every(inp => Number.isFinite(inp));
@@ -266,10 +274,13 @@ class App {
         // /!Number.isFinite(cadence)
         !validInputs(distance, duration, cadence) ||
         !allPositive(distance, duration, cadence)
-      )
+      ) {
+        errorButton.classList.remove('hidden__input');
         return this._renderErrorMessage(
           'The input must be a positive.non-numeric ,symbols and special character not allowed'
         );
+      }
+
       workout = new Running([lat, lng], distance, duration, cadence, address);
     }
     // If workout cycling , create cycling object
@@ -279,10 +290,12 @@ class App {
       if (
         !validInputs(distance, duration, elevation) ||
         !allPositive(distance, duration)
-      )
+      ) {
+        errorButton.classList.remove('hidden__input');
         return this._renderErrorMessage(
           'The input must be a positive.non-numeric ,symbols and special character not allowed'
         );
+      }
       workout = new Cycling([lat, lng], distance, duration, elevation, address);
     }
     // add new object to workout array
@@ -333,12 +346,20 @@ class App {
     }
   }
   _deleteAllWorkout() {
-    this.#workouts = [];
-    this.#markersArray.forEach(marker => marker.remove());
-    this.#markersArray = [];
-    this._setLocalStorage();
-    this._getLocalStorage();
+    confirmButton.classList.remove('hidden__input');
+    cancelButton.classList.remove('hidden__input');
+    this._renderErrorMessage('Do you want to delete all workouts');
+    confirmButton.addEventListener('click', () => {
+      this.#workouts = [];
+      this.#markersArray.forEach(marker => marker.remove());
+      this.#markersArray = [];
+      this._setLocalStorage();
+      this._getLocalStorage();
+      this._hideErrorMessage();
+    });
   }
+  _confirmUser() {}
+
   _editWorkout(id) {
     // run while edit workout
     this.#editWorkout = true;
@@ -415,52 +436,54 @@ class App {
   //*SORTING EVENT ------------------------------------
   _sortingWorkout(e) {
     e.stopPropagation();
-    const clickedButton =
-      e.target.closest('button') || e.target.closest('select');
+    const clickedButton = e.target.closest('button') || e.target.closest('select');
     if (!clickedButton) return;
-    if (clickedButton.dataset.sorting === 'distance') {
-      this.sortedWorkout = this._sorting(
-        this.sortedWorkout,
-        'distance',
-        `${this.isSorted ? 'desc' : 'asc'}`
-      );
-    }
-    if (clickedButton.dataset.sorting === 'duration') {
-      this.sortedWorkout = this._sorting(
-        this.sortedWorkout,
-        'duration',
-        `${this.isSorted ? 'desc' : 'asc'}`
-      );
-    }
-    if (clickedButton.dataset.sorting === 'filter') {
-      let cloneArray = JSON.parse(JSON.stringify(this.#workouts));
-      if (workoutFilter.value === 'cycling') {
-        this.sortedWorkout = cloneArray.filter(item => item.type === 'cycling');
-        workoutSpeedSort.classList.remove('hidden__input');
-      }
 
-      if (workoutFilter.value === 'running') {
-        this.sortedWorkout = cloneArray.filter(item => item.type === 'running');
-        workoutSpeedSort.classList.remove('hidden__input');
-      }
+    const sortType = clickedButton.dataset.sorting;
+    let cloneArray = JSON.parse(JSON.stringify(this.#workouts)); // Use this for filtering
 
-      if (workoutFilter.value === 'all') {
-        this.sortedWorkout = this.#workouts;
-        workoutSpeedSort.classList.add('hidden__input');
-      }
+    switch (sortType) {
+        case 'distance':
+        case 'duration':
+        case 'speed':
+            const sortBy = sortType === 'speed' 
+                ? (workoutFilter.value === 'running' ? 'pace' : 'speed') 
+                : sortType;
+            this.sortedWorkout = this._sorting(this.sortedWorkout, sortBy, `${this.isSorted ? 'desc' : 'asc'}`);
+            break;
+
+        case 'filter':
+            this._filterWorkouts(cloneArray);
+            break;
+
+        default:
+            return;
     }
-    if (clickedButton.dataset.sorting === 'speed') {
-      this.sortedWorkout = this._sorting(
-        this.sortedWorkout,
-        workoutFilter.value === 'running' ? 'pace' : 'speed',
-        `${this.isSorted ? 'desc' : 'asc'}`
-      );
-    }
+
+    // Clear and re-render the workout list
     workoutList.innerHTML = '';
     this.sortedWorkout.forEach(work => {
-      this._renderWorkout(work);
+        this._renderWorkout(work);
     });
-  }
+}
+
+_filterWorkouts(workouts) {
+    switch (workoutFilter.value) {
+        case 'cycling':
+            this.sortedWorkout = workouts.filter(item => item.type === 'cycling');
+            workoutSpeedSort.classList.remove('hidden__input');
+            break;
+        case 'running':
+            this.sortedWorkout = workouts.filter(item => item.type === 'running');
+            workoutSpeedSort.classList.remove('hidden__input');
+            break;
+        case 'all':
+            this.sortedWorkout = workouts;
+            workoutSpeedSort.classList.add('hidden__input');
+            break;
+    }
+}
+
   _sorting(array, sortBy, order) {
     array.sort((a, b) =>
       order === 'desc' ? b[sortBy] - a[sortBy] : a[sortBy] - b[sortBy]
@@ -591,15 +614,21 @@ class App {
     document.querySelector('.message').textContent = message;
   }
   _hideErrorMessage(e) {
+    
     if (e.target.tagName === 'BUTTON') {
       overlayWindow.classList.add('hidden__message');
+      allErrorButtons.forEach(button => {
+        button.classList.add('hidden__input');
+      });
       return;
     }
-
     const modalWindow = e.target.closest('.model__window');
     if (modalWindow) return;
-
-    overlayWindow.classList.add('hidden');
+    //hide all inputs
+    overlayWindow.classList.add('hidden__message');
+    allErrorButtons.forEach(button => {
+      button.classList.add('hidden__input');
+    });
   }
 
   // weather api fetch function--------------
@@ -673,15 +702,3 @@ Ability to draw lines and shapes instead of just points.
 Display weather data for workout time and place
 */
 
-/*
-    if (this.#mapEvent.latlng) {
-      ({ lat, lng } = this.#mapEvent.latlng);
-    } else {
-      if (inputLocation.value === '')
-        return this._renderErrorMessage('Please Enter the Location');
-      // If not defined, get coordinates using _getCoordinates
-      const coordinates = await this._getCoordinates();
-      ({ lat, lng } = coordinates);
-      return;
-    }
-    */

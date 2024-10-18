@@ -343,3 +343,9 @@ a:visited {
   grid-column:  1 / -1;
   color: #999999;
 }
+.message_btns{
+  display: flex;
+  gap: 30px;
+  align-items: center;
+  justify-content: center;
+}

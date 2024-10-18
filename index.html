@@ -80,7 +80,8 @@
               <label class="form__label">Location</label
               ><input
                 class="form__input form__input--location"
-                placeholder="choose location form map" disabled
+                placeholder="choose location form map"
+                disabled
               />
             </div>
             <div class="form__row">
@@ -118,7 +119,7 @@
                 placeholder="meters"
               />
             </div>
-            
+
             <button class="form__btn">OK</button>
           </form>
         </li>
@@ -263,7 +264,11 @@
             />
           </svg>
           <h2 class="message">Error message</h2>
-          <button class="confirm__button">OK</button>
+          <div class="message_btns">
+            <button class="confirm__button confirm__no hidden__input">Cancel</button>
+            <button class="confirm__button confirm__yes hidden__input">Confirm</button>
+            <button class="confirm__button confirm__ok hidden__input" >OK</button>
+          </div>
         </div>
       </div>
     </div>
