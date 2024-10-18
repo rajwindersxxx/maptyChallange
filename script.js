@@ -7,29 +7,36 @@ const inputDistance = document.querySelector('.form__input--distance');
 const inputDuration = document.querySelector('.form__input--duration');
 const inputCadence = document.querySelector('.form__input--cadence');
 const inputElevation = document.querySelector('.form__input--elevation');
-
+const inputLocation = document.querySelector('.form__input--location');
 const sideBar = document.querySelector('.sidebar');
+
 const workoutSpeedSort = document.querySelector('.speed__sorting');
 const workoutFilter = document.querySelector('.form__input--filter');
 const workoutList = document.querySelector('.workouts__data');
 const workoutEdit = document.querySelector('.workout__edit');
-const workoutDeleteAll = document.querySelector('.delete__btn');
+const workoutDeleteAll = document.querySelector('.deleteAll__btn');
+const workoutAdd = document.querySelector('.add__btns');
+
 const workoutHeading = document.querySelector('.workout__heading');
 const overlayWindow = document.querySelector('.overlay');
 const modelWindow = document.querySelector('model__window');
 const errorMessage = document.querySelector('.message');
 const errorButton = document.querySelector('.confirm__button');
+//Test button
+const testButton = document.querySelector('.test');
+
 let map, mapEvent;
 class Workout {
   date = new Date();
   id = (Date.now() + '').slice(-10);
   clicks = 0;
-  constructor(coords, distance, duration) {
+  constructor(coords, distance, duration, address) {
     // this.date = ... used in old js version
     // this.id = ...
     this.coords = coords; // [lat, lng]
     this.distance = distance; // in km
     this.duration = duration; // in min
+    this.address = address;
   }
   _setDescription() {
     // prettier-ignore
@@ -46,8 +53,8 @@ class Workout {
 
 class Running extends Workout {
   type = 'running';
-  constructor(coords, duration, distance, cadence) {
-    super(coords, duration, distance);
+  constructor(coords, duration, distance, cadence, address) {
+    super(coords, duration, distance, address);
     this.cadence = cadence;
     //when we call function inside , we do not need return keyword
     this.calcPace();
@@ -58,11 +65,25 @@ class Running extends Workout {
     this.pace = this.duration / this.distance;
     return this.pace;
   }
+  static rebuildFromStorage(data) {
+    const obj = new Running([0, 0], 0, 0, 0);
+    obj.date = data.date;
+    obj.id = data.id;
+    obj.clicks = data.clicks;
+    obj.coords = data.coords;
+    obj.duration = data.duration;
+    obj.distance = data.distance;
+    obj.cadence = data.cadence;
+    obj.pace = data.pace;
+    obj.description = data.description;
+    obj.address = data.address;
+    return obj;
+  }
 }
 class Cycling extends Workout {
   type = 'cycling';
-  constructor(coords, duration, distance, elevationGain) {
-    super(coords, duration, distance);
+  constructor(coords, duration, distance, elevationGain, address) {
+    super(coords, duration, distance, address);
     this.elevationGain = elevationGain;
     this.calcSpeed();
     this._setDescription();
@@ -71,6 +92,20 @@ class Cycling extends Workout {
     // km/h
     this.speed = this.distance / (this.duration / 60);
     return this.speed;
+  }
+  static rebuildFromStorage(data) {
+    const obj = new Cycling([0, 0], 0, 0, 0);
+    obj.date = data.date;
+    obj.id = data.id;
+    obj.clicks = data.clicks;
+    obj.coords = data.coords;
+    obj.duration = data.duration;
+    obj.distance = data.distance;
+    obj.speed = data.speed;
+    obj.elevationGain = data.elevationGain;
+    obj.description = data.description;
+    obj.address = data.address;
+    return obj;
   }
 }
 
@@ -87,13 +122,12 @@ class App {
   #workouts = [];
   #markers = new Map();
   #editWorkout = false;
+  #markersArray = [];
   editObject = '';
   isSorted = false;
   sortedWorkout = [];
   constructor() {
-    // get users's position
     this._getPosition(); // run when page load when object created
-    // get data from local storage
     this._getLocalStorage();
     this.sortedWorkout = JSON.parse(JSON.stringify(this.#workouts));
 
@@ -105,6 +139,13 @@ class App {
     workoutHeading.addEventListener('click', this._sortingWorkout.bind(this));
     errorButton.addEventListener('click', this._hideErrorMessage);
     overlayWindow.addEventListener('click', this._hideErrorMessage.bind(this));
+    workoutAdd.addEventListener('click', this._showForm.bind(this));
+    workoutDeleteAll.addEventListener(
+      'click',
+      this._deleteAllWorkout.bind(this)
+    );
+    //Event for testing
+    testButton.addEventListener('click', this._fitAllMarkers.bind(this));
   }
   //* my event listeners------------------------------------------------------------------------------
   _workoutActionEvents(button) {
@@ -124,6 +165,13 @@ class App {
       );
     }
   }
+  _fitAllMarkers(e) {
+    e.stopPropagation();
+    let group = new L.featureGroup(this.#markersArray);
+    this.#map.fitBounds(group.getBounds(), {
+      padding: [50, 50],
+    });
+  }
   _loadMap(position) {
     const { latitude } = position.coords;
     const { longitude } = position.coords;
@@ -131,15 +179,29 @@ class App {
 
     const coords = [latitude, longitude];
 
-    this.#map = L.map('map').setView(coords, this.#mapZoomlevel);
+    this.#map = L.map('map', {
+      worldCopyJump: false,
+    }).setView(coords, this.#mapZoomlevel);
+
+    const southWest = L.latLng(-90, -180);
+    const northEast = L.latLng(90, 180);
+    const bounds = L.latLngBounds(southWest, northEast);
+    this.#map.setMaxBounds(bounds);
+    this.#map.on('drag', () => {
+      this.#map.panInsideBounds(bounds, { animate: false });
+    });
+    this.#map.setMinZoom(2);
+    this.#map.setMaxZoom(18);
     //   console.log(map);
     L.tileLayer('https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(this.#map);
     // Handling  clicks on map
-    this.#map.on('click', this._showForm.bind(this));
-
+    this.#map.on('click', async coords => {
+      this._showForm(coords);
+      inputLocation.value = await this._getAddress(coords);
+    });
     this.#workouts.forEach(work => {
       this._renderWorkoutMarker(work);
     });
@@ -160,6 +222,7 @@ class App {
       inputDuration.value =
       inputElevation.value =
       inputCadence.value =
+      inputLocation.value =
         '';
     form.style.display = 'none';
     form.classList.add('hidden');
@@ -170,23 +233,27 @@ class App {
     inputCadence.closest('.form__row').classList.toggle('form__row--hidden');
   }
   _newWorkout(e) {
-    // run when edit is true
+    // if statement when call for edit
+    e.preventDefault();
     if (this.#editWorkout) {
-      e.preventDefault();
+      // it render new list of workouts
       this._renderModifiedWorkout();
       return;
     }
+    // return error if location not choose form map
+    if (!this.#mapEvent.latlng)
+      return this._renderErrorMessage('Please choose location from map');
     // run when editWorkout is false
     const validInputs = (...inputs) =>
       inputs.every(inp => Number.isFinite(inp));
     const allPositive = (...inputs) => inputs.every(inp => inp > 0);
-    e.preventDefault();
 
     // Get data from form
     const type = inputType.value;
     const distance = +inputDistance.value;
     const duration = +inputDuration.value;
     const { lat, lng } = this.#mapEvent.latlng;
+    const address = inputLocation.value;
 
     let workout;
     // Check if data is valid
@@ -200,8 +267,10 @@ class App {
         !validInputs(distance, duration, cadence) ||
         !allPositive(distance, duration, cadence)
       )
-        return this._renderErrorMessage();
-      workout = new Running([lat, lng], distance, duration, cadence);
+        return this._renderErrorMessage(
+          'The input must be a positive.non-numeric ,symbols and special character not allowed'
+        );
+      workout = new Running([lat, lng], distance, duration, cadence, address);
     }
     // If workout cycling , create cycling object
     if (type === 'cycling') {
@@ -211,11 +280,14 @@ class App {
         !validInputs(distance, duration, elevation) ||
         !allPositive(distance, duration)
       )
-        return this._renderErrorMessage();
-      workout = new Cycling([lat, lng], distance, duration, elevation);
+        return this._renderErrorMessage(
+          'The input must be a positive.non-numeric ,symbols and special character not allowed'
+        );
+      workout = new Cycling([lat, lng], distance, duration, elevation, address);
     }
     // add new object to workout array
     this.#workouts.push(workout);
+
     this.sortedWorkout = JSON.parse(JSON.stringify(this.#workouts));
 
     // Render workout on map as marker
@@ -228,6 +300,9 @@ class App {
 
     //Set local storage to all workouts
     this._setLocalStorage();
+
+    //* testing
+    console.log(this.#workouts);
   }
 
   // * My methods -----------------------------------------------------------------------------
@@ -236,6 +311,7 @@ class App {
 
     if (workoutId) {
       const marker = this.#markers.get(workoutId);
+
       if (marker) marker.remove(this.#map);
 
       const workoutElement = document.querySelector(`[data-id="${workoutId}"]`);
@@ -244,16 +320,30 @@ class App {
       const workoutIndex = this.#workouts.findIndex(
         workout => workout.id === workoutId
       );
-      if (workoutIndex > -1) this.#workouts.splice(workoutIndex, 1);
 
+      const markerIndex = this.#markersArray.findIndex(
+        marker => marker.options.id === workoutId
+      );
+      console.log(markerIndex);
+      if (workoutIndex > -1) this.#workouts.splice(workoutIndex, 1);
+      if (markerIndex > -1) this.#markersArray.splice(markerIndex, 1);
       this._setLocalStorage();
       workoutList.innerHTML = '';
       this._getLocalStorage();
     }
   }
+  _deleteAllWorkout() {
+    this.#workouts = [];
+    this.#markersArray.forEach(marker => marker.remove());
+    this.#markersArray = [];
+    this._setLocalStorage();
+    this._getLocalStorage();
+  }
   _editWorkout(id) {
+    // run while edit workout
     this.#editWorkout = true;
     this.editObject = this.#workouts.find(items => items.id === id);
+    //show form and rendered required fields
     this._showForm();
     if (this.editObject.type === 'cycling') {
       inputElevation
@@ -270,10 +360,13 @@ class App {
     inputCadence.value = this.editObject.cadence;
     inputDuration.value = this.editObject.duration;
     inputElevation.value = this.editObject.elevationGain;
+
+    //when press Enter , _newWorkout function render which edit true
   }
 
   _renderWorkoutMarker(workout) {
-    const marker = L.marker(workout.coords).addTo(this.#map);
+    let marker = L.marker(workout.coords, { id: workout.id }).addTo(this.#map);
+    this.#markersArray.push(marker);
     marker
       .bindPopup(
         L.popup({
@@ -295,6 +388,7 @@ class App {
     const workoutIndex = this.#workouts.findIndex(
       workout => workout.id === this.editObject.id
     );
+
     this.editObject.type = inputType.value;
     this.editObject.distance = +inputDistance.value;
     this.editObject.duration = +inputDuration.value;
@@ -309,13 +403,11 @@ class App {
       this.editObject.speed =
         this.editObject.distance / (this.editObject.duration / 60);
     }
-    console.log(this.editObject);
     this.#workouts.splice(workoutIndex, 1, this.editObject);
-    console.log(this.#workouts);
+
     this._hideForm();
-    this._renderWorkout(this.#workouts);
+
     this._setLocalStorage();
-    workoutList.innerHTML = '';
     this._getLocalStorage();
     this.#editWorkout = false;
   }
@@ -345,7 +437,6 @@ class App {
       if (workoutFilter.value === 'cycling') {
         this.sortedWorkout = cloneArray.filter(item => item.type === 'cycling');
         workoutSpeedSort.classList.remove('hidden__input');
-        console.log(workoutSpeedSort);
       }
 
       if (workoutFilter.value === 'running') {
@@ -359,14 +450,11 @@ class App {
       }
     }
     if (clickedButton.dataset.sorting === 'speed') {
-      console.log(workoutFilter.value);
-
       this.sortedWorkout = this._sorting(
         this.sortedWorkout,
         workoutFilter.value === 'running' ? 'pace' : 'speed',
         `${this.isSorted ? 'desc' : 'asc'}`
       );
-      console.log(this.sortedWorkout);
     }
     workoutList.innerHTML = '';
     this.sortedWorkout.forEach(work => {
@@ -419,6 +507,9 @@ class App {
       <span class="workout__value">${workout.cadence}</span>
       <span class="workout__unit">spm</span>
     </div>
+    <div class='workout__details workout__address'>
+     <h2 class="workout__location">On ${workout.address}</h2>
+    </div>
   </li>
   `;
     if (workout.type === 'cycling') {
@@ -433,6 +524,9 @@ class App {
         <span class="workout__value">${workout.elevationGain}</span>
         <span class="workout__unit">m</span>
       </div>
+      <div class='workout__details workout__address'>
+     <h2 class="workout__location">On ${workout.address}</h2>
+    </div>
     </li>`;
     }
     workoutList.insertAdjacentHTML('afterbegin', html);
@@ -452,7 +546,6 @@ class App {
     const workout = this.#workouts.find(
       work => work.id === workoutEl.dataset.id
     );
-    // console.log(workout);
 
     this.#map.setView(workout.coords, this.#mapZoomlevel, {
       animate: true,
@@ -465,7 +558,6 @@ class App {
   }
   // using the storage api
   _setLocalStorage() {
-    // only use for small data
     localStorage.setItem('workouts', JSON.stringify(this.#workouts));
   }
   _getLocalStorage() {
@@ -473,8 +565,17 @@ class App {
 
     if (!data) return;
 
-    this.#workouts = data;
+    let rebuildObject;
+    data.map((item, index) => {
+      if (item.type === 'running')
+        rebuildObject = Running.rebuildFromStorage(item);
+      if (item.type === 'cycling')
+        rebuildObject = Cycling.rebuildFromStorage(item);
+      this.#workouts.splice(index, 1, rebuildObject);
+    });
+
     this.sortedWorkout = JSON.parse(JSON.stringify(this.#workouts));
+    workoutList.innerHTML = '';
 
     this.#workouts.forEach(work => {
       this._renderWorkout(work);
@@ -485,22 +586,72 @@ class App {
     localStorage.removeItem('workouts');
     location.reload();
   }
-  _renderErrorMessage() {
-    overlayWindow.classList.remove('hidden');
-    console.log(errorMessage);
-    document.querySelector('.message').textContent =
-      'The input must be a positive. Negative numbers, strings, symbols, and non-numeric characters are not allowed.';
+  _renderErrorMessage(message) {
+    overlayWindow.classList.remove('hidden__message');
+    document.querySelector('.message').textContent = message;
   }
   _hideErrorMessage(e) {
     if (e.target.tagName === 'BUTTON') {
-      overlayWindow.classList.add('hidden');
+      overlayWindow.classList.add('hidden__message');
       return;
     }
-  
+
     const modalWindow = e.target.closest('.model__window');
-    if (modalWindow) return; 
-  
+    if (modalWindow) return;
+
     overlayWindow.classList.add('hidden');
+  }
+
+  // weather api fetch function--------------
+  async _getCoordinates() {
+    const address = encodeURIComponent(inputLocation.value);
+    try {
+      const response = await fetch(
+        `https://api.opencagedata.com/geocode/v1/json?q=${address}&key=f531fc1a5c0847ffac7ec0bea351a739`
+      );
+      if (!response.ok) {
+        if (!response.ok) {
+          throw new Error(`Error fetching address: ${response.statusText}`);
+        }
+      }
+      const data = await response.json();
+      const { geometry } = data.results[0]; // Get the first result's geometry
+      const coordinates = [geometry.lat, geometry.lng];
+      console.log(coordinates);
+      return coordinates;
+    } catch (error) {
+      console.error(error.message);
+      return null;
+    }
+  }
+  async _getAddress(coords) {
+    const { lat, lng } = coords.latlng;
+    const query = encodeURIComponent(`${lat} ${lng}`);
+    try {
+      const response = await fetch(
+        `https://api.opencagedata.com/geocode/v1/json?q=${query}&key=f531fc1a5c0847ffac7ec0bea351a739`
+      );
+      if (!response.ok) {
+        throw new Error(`Error fetching address: ${response.statusText}`);
+      }
+      const data = await response.json();
+
+      const address = data.results[0]?.formatted || 'Address not found';
+      const formatAddress = [
+        ...new Set(
+          address
+            .split(',')
+            .map(item => item.trim())
+            .filter(
+              item => item !== 'unnamed road' && item !== '' && !/\d/.test(item)
+            ) // Filter out unwanted items
+        ),
+      ].join(',');
+      return formatAddress;
+    } catch (err) {
+      console.error(err.message);
+      return null;
+    }
   }
 }
 const app = new App();
@@ -511,13 +662,26 @@ const app = new App();
 *must do
 // Ability to delete all workouts
 // Ability to sort workouts by a certain field(eg. distance)
-Re-build Running and cycling object coming from Local Storage
+// Re-build Running and cycling object coming from Local Storage
 // More realistic error and confirmation messages
 
 *hard challenges 
 
-Ability to position the map to show all workouts 
+// Ability to position the map to show all workouts 
 Ability to draw lines and shapes instead of just points.
-Geocode location from coordinates ("Run in Faro, Portugal")
+// Geocode location from coordinates ("Run in Faro, Portugal")
 Display weather data for workout time and place
 */
+
+/*
+    if (this.#mapEvent.latlng) {
+      ({ lat, lng } = this.#mapEvent.latlng);
+    } else {
+      if (inputLocation.value === '')
+        return this._renderErrorMessage('Please Enter the Location');
+      // If not defined, get coordinates using _getCoordinates
+      const coordinates = await this._getCoordinates();
+      ({ lat, lng } = coordinates);
+      return;
+    }
+    */
