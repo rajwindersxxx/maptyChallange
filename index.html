@@ -33,7 +33,7 @@
       crossorigin=""
     ></script>
 
-    <script defer src="script.js"></script>
+    <script defer type="module" src="script.js"></script>
     <title>mapty // Map your workouts</title>
   </head>
   <body>
@@ -248,6 +248,22 @@
 
     <div id="map" class="map">
       <button type="button" class="test show__marker">Show all Workout</button>
+      <div class="current__weather">
+        <div id="loader"></div> 
+        <!-- <div class="weather__location">India, Uttar Pradesh, Shravasti</div>
+        <div class="weather__icon">
+          <img
+            src="http://openweathermap.org/img/wn/02d@2x.png"
+            alt="weather icon"
+          />
+          <p>Cloudy sunny</p>
+        </div>
+        <div class="weather__description">
+          <div class="weather__details">9.1 Km/h</div>
+          <div class="weather__details">54%</div>
+          <div class="weather__details">35.1 °C</div>
+        </div> -->
+      </div>
     </div>
     <div class="overlay hidden__message">
       <div class="model__window">
@@ -265,9 +281,15 @@
           </svg>
           <h2 class="message">Error message</h2>
           <div class="message_btns">
-            <button class="confirm__button confirm__no hidden__input">Cancel</button>
-            <button class="confirm__button confirm__yes hidden__input">Confirm</button>
-            <button class="confirm__button confirm__ok hidden__input" >OK</button>
+            <button class="confirm__button confirm__no hidden__input">
+              Cancel
+            </button>
+            <button class="confirm__button confirm__yes hidden__input">
+              Confirm
+            </button>
+            <button class="confirm__button confirm__ok hidden__input">
+              OK
+            </button>
           </div>
         </div>
       </div>

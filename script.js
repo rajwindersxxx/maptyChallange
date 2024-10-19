@@ -1,5 +1,5 @@
-'use strict';
-
+('use strict');
+import icons from './data.js';
 const form = document.querySelector('.form');
 const containerWorkouts = document.querySelector('.workouts');
 const inputType = document.querySelector('.form__input--type');
@@ -8,24 +8,22 @@ const inputDuration = document.querySelector('.form__input--duration');
 const inputCadence = document.querySelector('.form__input--cadence');
 const inputElevation = document.querySelector('.form__input--elevation');
 const inputLocation = document.querySelector('.form__input--location');
-const sideBar = document.querySelector('.sidebar');
 
 const workoutHeading = document.querySelector('.workout__heading');
 const workoutSpeedSort = document.querySelector('.speed__sorting');
 const workoutFilter = document.querySelector('.form__input--filter');
 const workoutList = document.querySelector('.workouts__data');
-const workoutEdit = document.querySelector('.workout__edit');
 const workoutDeleteAll = document.querySelector('.deleteAll__btn');
 const workoutAdd = document.querySelector('.add__btns');
 
 const overlayWindow = document.querySelector('.overlay');
-const modelWindow = document.querySelector('model__window');
-const errorMessage = document.querySelector('.message');
+
 // model windows buttons
 const allErrorButtons = document.querySelectorAll('.confirm__button');
 const errorButton = document.querySelector('.confirm__ok');
 const confirmButton = document.querySelector('.confirm__yes');
 const cancelButton = document.querySelector('.confirm__no');
+const weatherBlock = document.querySelector('.current__weather');
 //Test button
 const testButton = document.querySelector('.test');
 
@@ -34,13 +32,14 @@ class Workout {
   date = new Date();
   id = (Date.now() + '').slice(-10);
   clicks = 0;
-  constructor(coords, distance, duration, address) {
+  constructor(coords, distance, duration, address, weather) {
     // this.date = ... used in old js version
     // this.id = ...
     this.coords = coords; // [lat, lng]
     this.distance = distance; // in km
     this.duration = duration; // in min
     this.address = address;
+    this.weather = weather;
   }
   _setDescription() {
     // prettier-ignore
@@ -57,8 +56,8 @@ class Workout {
 
 class Running extends Workout {
   type = 'running';
-  constructor(coords, duration, distance, cadence, address) {
-    super(coords, duration, distance, address);
+  constructor(coords, duration, distance, cadence, address, weather) {
+    super(coords, duration, distance, address, weather);
     this.cadence = cadence;
     //when we call function inside , we do not need return keyword
     this.calcPace();
@@ -81,13 +80,14 @@ class Running extends Workout {
     obj.pace = data.pace;
     obj.description = data.description;
     obj.address = data.address;
+    obj.weather = data.weather;
     return obj;
   }
 }
 class Cycling extends Workout {
   type = 'cycling';
-  constructor(coords, duration, distance, elevationGain, address) {
-    super(coords, duration, distance, address);
+  constructor(coords, duration, distance, elevationGain, address, weather) {
+    super(coords, duration, distance, address, weather);
     this.elevationGain = elevationGain;
     this.calcSpeed();
     this._setDescription();
@@ -109,6 +109,7 @@ class Cycling extends Workout {
     obj.elevationGain = data.elevationGain;
     obj.description = data.description;
     obj.address = data.address;
+    obj.weather = data.weather;
     return obj;
   }
 }
@@ -130,6 +131,7 @@ class App {
   editObject = '';
   isSorted = false;
   sortedWorkout = [];
+  currentWeather;
   constructor() {
     this._getPosition(); // run when page load when object created
     this._getLocalStorage();
@@ -178,12 +180,15 @@ class App {
       padding: [50, 50],
     });
   }
-  _loadMap(position) {
+  async _loadMap(position) {
     const { latitude } = position.coords;
     const { longitude } = position.coords;
     // console.log(`https://www.google.com/maps/@${latitude},${longitude}`);
 
     const coords = [latitude, longitude];
+    this.currentWeather = await this._getWeather(coords);
+    this._renderWeatherData();
+    console.log(this.currentWeather);
 
     this.#map = L.map('map', {
       worldCopyJump: false,
@@ -204,9 +209,13 @@ class App {
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(this.#map);
     // Handling  clicks on map
-    this.#map.on('click', async coords => {
-      this._showForm(coords);
-      inputLocation.value = await this._getAddress(coords);
+    this.#map.on('click', async map => {
+      this._showForm(map);
+      const { lat, lng } = map.latlng;
+      inputLocation.value = await this._getAddress([lat, lng]);
+      this.currentWeather = await this._getWeather([lat, lng]);
+      this._renderWeatherData();
+      console.log(this.currentWeather);
     });
     this.#workouts.forEach(work => {
       this._renderWorkoutMarker(work);
@@ -262,7 +271,7 @@ class App {
     const duration = +inputDuration.value;
     const { lat, lng } = this.#mapEvent.latlng;
     const address = inputLocation.value;
-
+    const weatherDetails = this.currentWeather;
     let workout;
     // Check if data is valid
     // If activity running , create running object
@@ -281,7 +290,14 @@ class App {
         );
       }
 
-      workout = new Running([lat, lng], distance, duration, cadence, address);
+      workout = new Running(
+        [lat, lng],
+        distance,
+        duration,
+        cadence,
+        address,
+        weatherDetails
+      );
     }
     // If workout cycling , create cycling object
     if (type === 'cycling') {
@@ -296,7 +312,14 @@ class App {
           'The input must be a positive.non-numeric ,symbols and special character not allowed'
         );
       }
-      workout = new Cycling([lat, lng], distance, duration, elevation, address);
+      workout = new Cycling(
+        [lat, lng],
+        distance,
+        duration,
+        elevation,
+        address,
+        weatherDetails
+      );
     }
     // add new object to workout array
     this.#workouts.push(workout);
@@ -319,9 +342,8 @@ class App {
   }
 
   // * My methods -----------------------------------------------------------------------------
-  _deleteWorkout() {
-    const workoutId = document.querySelector('.workout__delete').dataset.id;
-
+  _deleteWorkout(workoutId) {
+    
     if (workoutId) {
       const marker = this.#markers.get(workoutId);
 
@@ -358,7 +380,6 @@ class App {
       this._hideErrorMessage();
     });
   }
-  _confirmUser() {}
 
   _editWorkout(id) {
     // run while edit workout
@@ -436,53 +457,61 @@ class App {
   //*SORTING EVENT ------------------------------------
   _sortingWorkout(e) {
     e.stopPropagation();
-    const clickedButton = e.target.closest('button') || e.target.closest('select');
+    const clickedButton =
+      e.target.closest('button') || e.target.closest('select');
     if (!clickedButton) return;
 
     const sortType = clickedButton.dataset.sorting;
     let cloneArray = JSON.parse(JSON.stringify(this.#workouts)); // Use this for filtering
 
     switch (sortType) {
-        case 'distance':
-        case 'duration':
-        case 'speed':
-            const sortBy = sortType === 'speed' 
-                ? (workoutFilter.value === 'running' ? 'pace' : 'speed') 
-                : sortType;
-            this.sortedWorkout = this._sorting(this.sortedWorkout, sortBy, `${this.isSorted ? 'desc' : 'asc'}`);
-            break;
+      case 'distance':
+      case 'duration':
+      case 'speed':
+        const sortBy =
+          sortType === 'speed'
+            ? workoutFilter.value === 'running'
+              ? 'pace'
+              : 'speed'
+            : sortType;
+        this.sortedWorkout = this._sorting(
+          this.sortedWorkout,
+          sortBy,
+          `${this.isSorted ? 'desc' : 'asc'}`
+        );
+        break;
 
-        case 'filter':
-            this._filterWorkouts(cloneArray);
-            break;
+      case 'filter':
+        this._filterWorkouts(cloneArray);
+        break;
 
-        default:
-            return;
+      default:
+        return;
     }
 
     // Clear and re-render the workout list
     workoutList.innerHTML = '';
     this.sortedWorkout.forEach(work => {
-        this._renderWorkout(work);
+      this._renderWorkout(work);
     });
-}
+  }
 
-_filterWorkouts(workouts) {
+  _filterWorkouts(workouts) {
     switch (workoutFilter.value) {
-        case 'cycling':
-            this.sortedWorkout = workouts.filter(item => item.type === 'cycling');
-            workoutSpeedSort.classList.remove('hidden__input');
-            break;
-        case 'running':
-            this.sortedWorkout = workouts.filter(item => item.type === 'running');
-            workoutSpeedSort.classList.remove('hidden__input');
-            break;
-        case 'all':
-            this.sortedWorkout = workouts;
-            workoutSpeedSort.classList.add('hidden__input');
-            break;
+      case 'cycling':
+        this.sortedWorkout = workouts.filter(item => item.type === 'cycling');
+        workoutSpeedSort.classList.remove('hidden__input');
+        break;
+      case 'running':
+        this.sortedWorkout = workouts.filter(item => item.type === 'running');
+        workoutSpeedSort.classList.remove('hidden__input');
+        break;
+      case 'all':
+        this.sortedWorkout = workouts;
+        workoutSpeedSort.classList.add('hidden__input');
+        break;
     }
-}
+  }
 
   _sorting(array, sortBy, order) {
     array.sort((a, b) =>
@@ -492,68 +521,6 @@ _filterWorkouts(workouts) {
     return array; // Return the sorted array
   }
 
-  _renderWorkout(workout) {
-    let html = `
-    <li class="workout workout--${workout.type}" data-id="${workout.id}">
-      <h2 class="workout__title">${workout.description}</h2>
-      <div class="workout__action">
-      <button class='workout__edit icon__btns' data-id=${workout.id}>
-        <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed"><path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z"/></svg>
-      </button>
-       <button class='workout__delete icon__btns' data-id=${workout.id}>
-        <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed"><path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></svg>
-      </button>
-      </div>
-          <div class="workout__details">
-            <span class="workout__icon">${
-              workout.type === 'running' ? '🏃‍♂️' : '🚴‍♀️'
-            }</span>
-            <span class="workout__value">${workout.distance}</span>
-            <span class="workout__unit">km</span>
-          </div>
-          <div class="workout__details">
-            <span class="workout__icon">⏱</span>
-            <span class="workout__value">${workout.duration}</span>
-            <span class="workout__unit">min</span>
-          </div>
-          `;
-
-    if (workout.type === 'running')
-      html += `
-    <div class="workout__details">
-      <span class="workout__icon">⚡️</span>
-      <span class="workout__value">${workout.pace.toFixed(1)}</span>
-      <span class="workout__unit">min/km</span>
-    </div>
-    <div class="workout__details">
-      <span class="workout__icon">🦶🏼</span>
-      <span class="workout__value">${workout.cadence}</span>
-      <span class="workout__unit">spm</span>
-    </div>
-    <div class='workout__details workout__address'>
-     <h2 class="workout__location">On ${workout.address}</h2>
-    </div>
-  </li>
-  `;
-    if (workout.type === 'cycling') {
-      html += `
-    <div class="workout__details">
-        <span class="workout__icon">⚡️</span>
-        <span class="workout__value">${workout.speed.toFixed(1)}</span>        
-        <span class="workout__unit">km/h</span>
-      </div>
-      <div class="workout__details">
-        <span class="workout__icon">⛰</span>
-        <span class="workout__value">${workout.elevationGain}</span>
-        <span class="workout__unit">m</span>
-      </div>
-      <div class='workout__details workout__address'>
-     <h2 class="workout__location">On ${workout.address}</h2>
-    </div>
-    </li>`;
-    }
-    workoutList.insertAdjacentHTML('afterbegin', html);
-  }
   _moveToPopup(e) {
     const buttonClicked = e.target.closest('.icon__btns');
     if (buttonClicked) {
@@ -614,7 +581,6 @@ _filterWorkouts(workouts) {
     document.querySelector('.message').textContent = message;
   }
   _hideErrorMessage(e) {
-    
     if (e.target.tagName === 'BUTTON') {
       overlayWindow.classList.add('hidden__message');
       allErrorButtons.forEach(button => {
@@ -631,7 +597,7 @@ _filterWorkouts(workouts) {
     });
   }
 
-  // weather api fetch function--------------
+  // All Api block ------------------------------------------
   async _getCoordinates() {
     const address = encodeURIComponent(inputLocation.value);
     try {
@@ -654,7 +620,8 @@ _filterWorkouts(workouts) {
     }
   }
   async _getAddress(coords) {
-    const { lat, lng } = coords.latlng;
+    console.log(coords);
+    const [lat, lng] = coords;
     const query = encodeURIComponent(`${lat} ${lng}`);
     try {
       const response = await fetch(
@@ -682,7 +649,192 @@ _filterWorkouts(workouts) {
       return null;
     }
   }
+  async _getWeather(coords) {
+    const [log, lat] = coords;
+    try {
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${log}&longitude=${lat}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m`
+      );
+      const data = await response.json();
+      const address = await this._getAddress([log, lat]);
+      const day_Night = data.current.is_day === 1 ? 'day' : 'day'; //always light icon
+      const weather_code = data.current.weather_code;
+      const weatherData = {
+        time: data.current.time,
+        temperature: `${data.current.temperature_2m} ${data.current_units.temperature_2m}`,
+        humidity: `${data.current.relative_humidity_2m} ${data.current_units.relative_humidity_2m}`,
+        wind: `${data.current.wind_speed_10m} ${data.current_units.wind_speed_10m}`,
+        weatherCode: weather_code,
+        dayNight: day_Night,
+        description: icons[weather_code][day_Night].description,
+        icon: icons[weather_code][day_Night].image,
+        address: address,
+      };
+
+      return weatherData;
+    } catch (error) {
+      console.log(error);
+    }
+  }
+  // all html blocks -----------------------------------------------
+  _renderWeatherData() {
+    weatherBlock.innerHTML = '';
+    const markup = `
+        <div class="weather__location">${this.currentWeather.address}</div>
+        <div class="weather__icon">
+          <img
+            src="${this.currentWeather.icon}"
+            alt="weather icon"
+          />
+          <p>${this.currentWeather.description}</p>
+        </div>
+        <div class="weather__description">
+          <div class="weather__details"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed"><path d="M460-160q-50 0-85-35t-35-85h80q0 17 11.5 28.5T460-240q17 0 28.5-11.5T500-280q0-17-11.5-28.5T460-320H80v-80h380q50 0 85 35t35 85q0 50-35 85t-85 35ZM80-560v-80h540q26 0 43-17t17-43q0-26-17-43t-43-17q-26 0-43 17t-17 43h-80q0-59 40.5-99.5T620-840q59 0 99.5 40.5T760-700q0 59-40.5 99.5T620-560H80Zm660 320v-80q26 0 43-17t17-43q0-26-17-43t-43-17H80v-80h660q59 0 99.5 40.5T880-380q0 59-40.5 99.5T740-240Z"/></svg> ${this.currentWeather.wind}</div>
+          <div class="weather__details"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed"><path d="M491-200q12-1 20.5-9.5T520-230q0-14-9-22.5t-23-7.5q-41 3-87-22.5T343-375q-2-11-10.5-18t-19.5-7q-14 0-23 10.5t-6 24.5q17 91 80 130t127 35ZM480-80q-137 0-228.5-94T160-408q0-100 79.5-217.5T480-880q161 137 240.5 254.5T800-408q0 140-91.5 234T480-80Zm0-80q104 0 172-70.5T720-408q0-73-60.5-165T480-774Q361-665 300.5-573T240-408q0 107 68 177.5T480-160Zm0-320Z"/></svg> ${this.currentWeather.humidity}</div>
+          <div class="weather__details"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed"><path d="M480-120q-83 0-141.5-58.5T280-320q0-48 21-89.5t59-70.5v-240q0-50 35-85t85-35q50 0 85 35t35 85v240q38 29 59 70.5t21 89.5q0 83-58.5 141.5T480-120Zm0-80q50 0 85-35t35-85q0-29-12.5-54T552-416l-32-24v-280q0-17-11.5-28.5T480-760q-17 0-28.5 11.5T440-720v280l-32 24q-23 17-35.5 42T360-320q0 50 35 85t85 35Zm0-120Z"/></svg> ${this.currentWeather.temperature}</div>
+        </div>
+      </div>
+    `;
+    weatherBlock.insertAdjacentHTML('afterbegin', markup);
+  }
+  
+  _renderWorkout(workout) {
+    let addressMarkup = `
+    <div class='workout__details workout__address'>
+     <h2 class="workout__location">On ${workout.address}</h2>
+     </div>
+     <div class="weather__details">
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    height="24px"
+    viewBox="0 -960 960 960"
+    width="24px"
+    fill="#e8eaed"
+  >
+    <path
+      d="M460-160q-50 0-85-35t-35-85h80q0 17 11.5 28.5T460-240q17 0 28.5-11.5T500-280q0-17-11.5-28.5T460-320H80v-80h380q50 0 85 35t35 85q0 50-35 85t-85 35ZM80-560v-80h540q26 0 43-17t17-43q0-26-17-43t-43-17q-26 0-43 17t-17 43h-80q0-59 40.5-99.5T620-840q59 0 99.5 40.5T760-700q0 59-40.5 99.5T620-560H80Zm660 320v-80q26 0 43-17t17-43q0-26-17-43t-43-17H80v-80h660q59 0 99.5 40.5T880-380q0 59-40.5 99.5T740-240Z"
+    />
+  </svg>
+  ${workout.weather.wind}
+</div>
+<div class="weather__details">
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    height="24px"
+    viewBox="0 -960 960 960"
+    width="24px"
+    fill="#e8eaed"
+  >
+    <path
+      d="M491-200q12-1 20.5-9.5T520-230q0-14-9-22.5t-23-7.5q-41 3-87-22.5T343-375q-2-11-10.5-18t-19.5-7q-14 0-23 10.5t-6 24.5q17 91 80 130t127 35ZM480-80q-137 0-228.5-94T160-408q0-100 79.5-217.5T480-880q161 137 240.5 254.5T800-408q0 140-91.5 234T480-80Zm0-80q104 0 172-70.5T720-408q0-73-60.5-165T480-774Q361-665 300.5-573T240-408q0 107 68 177.5T480-160Zm0-320Z"
+    />
+  </svg>
+  ${workout.weather.humidity}
+</div>
+<div class="weather__details">
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    height="24px"
+    viewBox="0 -960 960 960"
+    width="24px"
+    fill="#e8eaed"
+  >
+    <path
+      d="M480-120q-83 0-141.5-58.5T280-320q0-48 21-89.5t59-70.5v-240q0-50 35-85t85-35q50 0 85 35t35 85v240q38 29 59 70.5t21 89.5q0 83-58.5 141.5T480-120Zm0-80q50 0 85-35t35-85q0-29-12.5-54T552-416l-32-24v-280q0-17-11.5-28.5T480-760q-17 0-28.5 11.5T440-720v280l-32 24q-23 17-35.5 42T360-320q0 50 35 85t85 35Zm0-120Z"
+    />
+  </svg>
+  ${workout.weather.temperature}
+</div>
+<div class="weather__details weather__icon--list">
+${workout.weather.description}
+          <img
+            src="${workout.weather.icon}"
+            alt="weather icon"
+          />
+</div>
+    `;
+    let html = `
+    <li class="workout workout--${workout.type}" data-id="${workout.id}">
+      <h2 class="workout__title">${
+        workout.description
+      } at ${workout.weather.time.slice(11, 16)}</h2>
+      <div class="workout__action">
+      <button class="workout__edit icon__btns" data-id="${workout.id}">
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    height="24px"
+    viewBox="0 -960 960 960"
+    width="24px"
+    fill="#e8eaed"
+  >
+    <path
+      d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z"
+    />
+  </svg>
+</button>
+<button class="workout__delete icon__btns" data-id="${workout.id}">
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    height="24px"
+    viewBox="0 -960 960 960"
+    width="24px"
+    fill="#e8eaed"
+  >
+    <path
+      d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"
+    />
+  </svg>
+</button>
+      </div>
+          <div class="workout__details">
+            <span class="workout__icon">${
+              workout.type === 'running' ? '🏃‍♂️' : '🚴‍♀️'
+            }</span>
+            <span class="workout__value">${workout.distance}</span>
+            <span class="workout__unit">km</span>
+          </div>
+          <div class="workout__details">
+            <span class="workout__icon">⏱</span>
+            <span class="workout__value">${workout.duration}</span>
+            <span class="workout__unit">min</span>
+          </div>
+          `;
+
+    if (workout.type === 'running')
+      html += `
+    <div class="workout__details">
+      <span class="workout__icon">⚡️</span>
+      <span class="workout__value">${workout.pace.toFixed(1)}</span>
+      <span class="workout__unit">min/km</span>
+    </div>
+    <div class="workout__details">
+      <span class="workout__icon">🦶🏼</span>
+      <span class="workout__value">${workout.cadence}</span>
+      <span class="workout__unit">spm</span>
+    </div>
+    ${addressMarkup}
+  
+  </li>
+  `;
+    if (workout.type === 'cycling') {
+      html += `
+    <div class="workout__details">
+        <span class="workout__icon">⚡️</span>
+        <span class="workout__value">${workout.speed.toFixed(1)}</span>        
+        <span class="workout__unit">km/h</span>
+      </div>
+      <div class="workout__details">
+        <span class="workout__icon">⛰</span>
+        <span class="workout__value">${workout.elevationGain}</span>
+        <span class="workout__unit">m</span>
+      </div>
+    ${addressMarkup}   
+    </li>`;
+    }
+    workoutList.insertAdjacentHTML('afterbegin', html);
+  }
 }
+
 const app = new App();
 //get current location from browser
 
@@ -701,4 +853,3 @@ Ability to draw lines and shapes instead of just points.
 // Geocode location from coordinates ("Run in Faro, Portugal")
 Display weather data for workout time and place
 */
-
