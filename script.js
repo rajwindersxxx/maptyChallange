@@ -188,7 +188,6 @@ class App {
     const coords = [latitude, longitude];
     this.currentWeather = await this._getWeather(coords);
     this._renderWeatherData();
-    console.log(this.currentWeather);
 
     this.#map = L.map('map', {
       worldCopyJump: false,
@@ -215,7 +214,6 @@ class App {
       inputLocation.value = await this._getAddress([lat, lng]);
       this.currentWeather = await this._getWeather([lat, lng]);
       this._renderWeatherData();
-      console.log(this.currentWeather);
     });
     this.#workouts.forEach(work => {
       this._renderWorkoutMarker(work);
@@ -337,8 +335,6 @@ class App {
     //Set local storage to all workouts
     this._setLocalStorage();
 
-    //* testing
-    console.log(this.#workouts);
   }
 
   // * My methods -----------------------------------------------------------------------------
@@ -358,7 +354,6 @@ class App {
       const markerIndex = this.#markersArray.findIndex(
         marker => marker.options.id === workoutId
       );
-      console.log(markerIndex);
       if (workoutIndex > -1) this.#workouts.splice(workoutIndex, 1);
       if (markerIndex > -1) this.#markersArray.splice(markerIndex, 1);
       this._setLocalStorage();
@@ -628,12 +623,11 @@ class App {
       //   `https://api.opencagedata.com/geocode/v1/json?q=${query}&key=xx`
       // );
       // const query = `${lat} ${lng}`;
-      const response = await fetch(`http://api.tiven.xyz/getAddress?lat=${lat}&log=${log}`);
+      const response = await fetch(`https://api.tiven.xyz/getAddress?lat=${lat}&log=${log}`);
       if (!response.ok) {
         throw new Error(`Error fetching address: ${response.statusText}`);
       }
       const data = await response.json();
-      console.log(data);
       
       const address = data.results[0]?.formatted || 'Address not found';
       const formatAddress = [
@@ -658,7 +652,7 @@ class App {
       // const response = await fetch(
       //   `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${log}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m`
       // );
-      const response = await fetch(`http://api.tiven.xyz/forecast?lat=${lat}&log=${log}`);
+      const response = await fetch(`https://api.tiven.xyz/forecast?lat=${lat}&log=${log}`);
       const data = await response.json();
       const address = await this._getAddress([lat, log]);
       const day_Night = data.current.is_day === 1 ? 'day' : 'day'; //always light icon
