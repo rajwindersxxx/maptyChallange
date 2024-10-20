@@ -343,7 +343,6 @@ class App {
 
   // * My methods -----------------------------------------------------------------------------
   _deleteWorkout(workoutId) {
-    
     if (workoutId) {
       const marker = this.#markers.get(workoutId);
 
@@ -601,8 +600,11 @@ class App {
   async _getCoordinates() {
     const address = encodeURIComponent(inputLocation.value);
     try {
+      // const response = await fetch(
+      //   `https://api.opencagedata.com/geocode/v1/json?q=${address}&key=xx`
+      // );
       const response = await fetch(
-        `https://api.opencagedata.com/geocode/v1/json?q=${address}&key=f531fc1a5c0847ffac7ec0bea351a739`
+        `https://api.tiven.xyz/geocode?q=${address}`
       );
       if (!response.ok) {
         if (!response.ok) {
@@ -612,7 +614,6 @@ class App {
       const data = await response.json();
       const { geometry } = data.results[0]; // Get the first result's geometry
       const coordinates = [geometry.lat, geometry.lng];
-      console.log(coordinates);
       return coordinates;
     } catch (error) {
       console.error(error.message);
@@ -620,18 +621,20 @@ class App {
     }
   }
   async _getAddress(coords) {
-    console.log(coords);
-    const [lat, lng] = coords;
-    const query = encodeURIComponent(`${lat} ${lng}`);
+    const [lat, log] = coords;
     try {
-      const response = await fetch(
-        `https://api.opencagedata.com/geocode/v1/json?q=${query}&key=f531fc1a5c0847ffac7ec0bea351a739`
-      );
+      // const query = encodeURIComponent(`${lat} ${log}`);
+      // const response = await fetch(
+      //   `https://api.opencagedata.com/geocode/v1/json?q=${query}&key=xx`
+      // );
+      // const query = `${lat} ${lng}`;
+      const response = await fetch(`http://api.tiven.xyz/getAddress?lat=${lat}&log=${log}`);
       if (!response.ok) {
         throw new Error(`Error fetching address: ${response.statusText}`);
       }
       const data = await response.json();
-
+      console.log(data);
+      
       const address = data.results[0]?.formatted || 'Address not found';
       const formatAddress = [
         ...new Set(
@@ -650,13 +653,14 @@ class App {
     }
   }
   async _getWeather(coords) {
-    const [log, lat] = coords;
+    const [lat, log] = coords;
     try {
-      const response = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${log}&longitude=${lat}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m`
-      );
+      // const response = await fetch(
+      //   `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${log}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m`
+      // );
+      const response = await fetch(`http://api.tiven.xyz/forecast?lat=${lat}&log=${log}`);
       const data = await response.json();
-      const address = await this._getAddress([log, lat]);
+      const address = await this._getAddress([lat, log]);
       const day_Night = data.current.is_day === 1 ? 'day' : 'day'; //always light icon
       const weather_code = data.current.weather_code;
       const weatherData = {
@@ -689,15 +693,55 @@ class App {
           <p>${this.currentWeather.description}</p>
         </div>
         <div class="weather__description">
-          <div class="weather__details"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed"><path d="M460-160q-50 0-85-35t-35-85h80q0 17 11.5 28.5T460-240q17 0 28.5-11.5T500-280q0-17-11.5-28.5T460-320H80v-80h380q50 0 85 35t35 85q0 50-35 85t-85 35ZM80-560v-80h540q26 0 43-17t17-43q0-26-17-43t-43-17q-26 0-43 17t-17 43h-80q0-59 40.5-99.5T620-840q59 0 99.5 40.5T760-700q0 59-40.5 99.5T620-560H80Zm660 320v-80q26 0 43-17t17-43q0-26-17-43t-43-17H80v-80h660q59 0 99.5 40.5T880-380q0 59-40.5 99.5T740-240Z"/></svg> ${this.currentWeather.wind}</div>
-          <div class="weather__details"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed"><path d="M491-200q12-1 20.5-9.5T520-230q0-14-9-22.5t-23-7.5q-41 3-87-22.5T343-375q-2-11-10.5-18t-19.5-7q-14 0-23 10.5t-6 24.5q17 91 80 130t127 35ZM480-80q-137 0-228.5-94T160-408q0-100 79.5-217.5T480-880q161 137 240.5 254.5T800-408q0 140-91.5 234T480-80Zm0-80q104 0 172-70.5T720-408q0-73-60.5-165T480-774Q361-665 300.5-573T240-408q0 107 68 177.5T480-160Zm0-320Z"/></svg> ${this.currentWeather.humidity}</div>
-          <div class="weather__details"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed"><path d="M480-120q-83 0-141.5-58.5T280-320q0-48 21-89.5t59-70.5v-240q0-50 35-85t85-35q50 0 85 35t35 85v240q38 29 59 70.5t21 89.5q0 83-58.5 141.5T480-120Zm0-80q50 0 85-35t35-85q0-29-12.5-54T552-416l-32-24v-280q0-17-11.5-28.5T480-760q-17 0-28.5 11.5T440-720v280l-32 24q-23 17-35.5 42T360-320q0 50 35 85t85 35Zm0-120Z"/></svg> ${this.currentWeather.temperature}</div>
+          <div class="weather__details">
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    height="24px"
+    viewBox="0 -960 960 960"
+    width="24px"
+    fill="#e8eaed"
+  >
+    <path
+      d="M460-160q-50 0-85-35t-35-85h80q0 17 11.5 28.5T460-240q17 0 28.5-11.5T500-280q0-17-11.5-28.5T460-320H80v-80h380q50 0 85 35t35 85q0 50-35 85t-85 35ZM80-560v-80h540q26 0 43-17t17-43q0-26-17-43t-43-17q-26 0-43 17t-17 43h-80q0-59 40.5-99.5T620-840q59 0 99.5 40.5T760-700q0 59-40.5 99.5T620-560H80Zm660 320v-80q26 0 43-17t17-43q0-26-17-43t-43-17H80v-80h660q59 0 99.5 40.5T880-380q0 59-40.5 99.5T740-240Z"
+    />
+  </svg>
+  ${this.currentWeather.wind}
+</div>
+<div class="weather__details">
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    height="24px"
+    viewBox="0 -960 960 960"
+    width="24px"
+    fill="#e8eaed"
+  >
+    <path
+      d="M491-200q12-1 20.5-9.5T520-230q0-14-9-22.5t-23-7.5q-41 3-87-22.5T343-375q-2-11-10.5-18t-19.5-7q-14 0-23 10.5t-6 24.5q17 91 80 130t127 35ZM480-80q-137 0-228.5-94T160-408q0-100 79.5-217.5T480-880q161 137 240.5 254.5T800-408q0 140-91.5 234T480-80Zm0-80q104 0 172-70.5T720-408q0-73-60.5-165T480-774Q361-665 300.5-573T240-408q0 107 68 177.5T480-160Zm0-320Z"
+    />
+  </svg>
+  ${this.currentWeather.humidity}
+</div>
+<div class="weather__details">
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    height="24px"
+    viewBox="0 -960 960 960"
+    width="24px"
+    fill="#e8eaed"
+  >
+    <path
+      d="M480-120q-83 0-141.5-58.5T280-320q0-48 21-89.5t59-70.5v-240q0-50 35-85t85-35q50 0 85 35t35 85v240q38 29 59 70.5t21 89.5q0 83-58.5 141.5T480-120Zm0-80q50 0 85-35t35-85q0-29-12.5-54T552-416l-32-24v-280q0-17-11.5-28.5T480-760q-17 0-28.5 11.5T440-720v280l-32 24q-23 17-35.5 42T360-320q0 50 35 85t85 35Zm0-120Z"
+    />
+  </svg>
+  ${this.currentWeather.temperature}
+</div>
+
         </div>
       </div>
     `;
     weatherBlock.insertAdjacentHTML('afterbegin', markup);
   }
-  
+
   _renderWorkout(workout) {
     let addressMarkup = `
     <div class='workout__details workout__address'>
