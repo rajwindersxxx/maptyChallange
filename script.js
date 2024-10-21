@@ -602,17 +602,14 @@ class App {
         `https://api.tiven.xyz/geocode?q=${address}`
       );
       if (!response.ok) {
-        if (!response.ok) {
           throw new Error(`Error fetching address: ${response.statusText}`);
-        }
       }
       const data = await response.json();
       const { geometry } = data.results[0]; // Get the first result's geometry
       const coordinates = [geometry.lat, geometry.lng];
       return coordinates;
-    } catch (error) {
-      console.error(error.message);
-      return null;
+    } catch (error) {   
+      return this._renderErrorMessage(`The service is currently unavailable. Please try again later.`);
     }
   }
   async _getAddress(coords) {
@@ -626,6 +623,7 @@ class App {
       const response = await fetch(`https://api.tiven.xyz/getAddress?lat=${lat}&log=${log}`);
       if (!response.ok) {
         throw new Error(`Error fetching address: ${response.statusText}`);
+       
       }
       const data = await response.json();
       
@@ -641,9 +639,8 @@ class App {
         ),
       ].join(',');
       return formatAddress;
-    } catch (err) {
-      console.error(err.message);
-      return null;
+    } catch (error) {
+      return this._renderErrorMessage(`The service is currently unavailable. Please try again later.`);
     }
   }
   async _getWeather(coords) {
@@ -653,6 +650,9 @@ class App {
       //   `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${log}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m`
       // );
       const response = await fetch(`https://api.tiven.xyz/forecast?lat=${lat}&log=${log}`);
+      if(!response.ok){
+        throw new Error(`Error fetching address: ${response.statusText}`);
+      }
       const data = await response.json();
       const address = await this._getAddress([lat, log]);
       const day_Night = data.current.is_day === 1 ? 'day' : 'day'; //always light icon
@@ -671,7 +671,7 @@ class App {
 
       return weatherData;
     } catch (error) {
-      console.log(error);
+      return this._renderErrorMessage(`The service is currently unavailable. Please try again later.`);
     }
   }
   // all html blocks -----------------------------------------------
