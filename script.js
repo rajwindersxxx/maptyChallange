@@ -203,7 +203,7 @@ class App {
     this.#map.setMinZoom(2);
     this.#map.setMaxZoom(18);
     //   console.log(map);
-    L.tileLayer('https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(this.#map);
