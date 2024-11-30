@@ -1,6 +1,10 @@
 ## mapty project 
 This project demonstrates my current JavaScript skills. The core functionality was developed by my Udemy instructor, Jonas, as part of the course. However, the challenges listed below were completed by me.
+
+
 Tools Used: leaflet library
+
+
 # Must-Do Challenges
 
 - Delete All Workouts: Users can delete all workouts with a confirmation prompt.
